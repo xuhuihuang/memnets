@@ -74,5 +74,9 @@ Or
 sh ./memnets/scripts/train_memnets.sh
 ```
 
+## How to cite
+
+MEMnets refers to the preprint [10.26434/chemrxiv-2024-71qrl](https://chemrxiv.org/engage/chemrxiv/article-details/66d7653dcec5d6c1420823b6).
+
 [Go to Top](#Abstract)
 
