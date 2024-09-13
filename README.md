@@ -41,6 +41,9 @@ python -m pip install ./memnets
 
 ## Quick start
 
+### Start with Colab
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/xuhuihuang/memnets/blob/main/example/alanine_dipeptide_colab.ipynb)
+
 ### Start with jupyter notebook
 
 Check this file for the demo:
