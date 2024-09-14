@@ -44,11 +44,9 @@ args = parser.parse_args()
 
 state = {k: v for k, v in args._get_kwargs()}
 
-date_time = datetime.now().strftime("%m_%d_%H_%M")
+date_time = datetime.now().strftime("%m_%d_%H_%M_%S")
 
-args.name = (f"{date_time}_memnets_lr_{args.learning_rate}_bsz_{args.train_batch_size}_"
-        f"lagtime_{args.lagtimes}_decay_rate_{args.decay_rate}_thres_{args.thres}_"
-        f"n_epochs_{args.n_epochs}")
+args.name = (f"{date_time}_memnets_results")
 
 args.log_directory = args.saving_directory+"/{name}/logs".format(name=args.name)
 args.model_directory = args.saving_directory+"/{name}/checkpoints".format(name=args.name)
