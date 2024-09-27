@@ -81,5 +81,11 @@ sh ./memnets/scripts/train_memnets.sh
 
 MEMnets refers to the preprint [10.26434/chemrxiv-2024-71qrl](https://chemrxiv.org/engage/chemrxiv/article-details/66d7653dcec5d6c1420823b6).
 
+## More instructions 
+
+We already added the example of alanine dipeptide to the repo. 
+
+To reproduce the results of the other datasets reported in the preprint, please refer to the Methods section in preprint, or you can directly contact bliu293@wisc.edu.
+
 [Go to Top](#Abstract)
 
