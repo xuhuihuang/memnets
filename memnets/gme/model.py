@@ -5,6 +5,7 @@ import numpy as np
 from .loss import MEMLoss
 from .utils import map_data
 from ..processing.dataprocessing import Preprocessing, Postprocessing
+from typing import Callable, Tuple, Optional, List
 
 class MEMLayer(nn.Module):
     """ Create MEMnets lobe.
@@ -107,23 +108,41 @@ class MEMNet:
     lobe : torch.nn.Module
         A neural network model which maps the input data to the encoder outputs.
 
-    lagtimes : list
+    lagtimes : list[float]
         Encoder lag times of MEMnets.
 
-    optimizer : str, default = 'Adam'
-        The type of optimizer used for training.
+    optimizer : str, optional, default = 'Adam'
+        The type of optimizer used for training. Supported options include `'Adam'`, `'SGD'`, `'RMSprop'`.
 
     device : torch.device, default = None
         The device on which the torch modules are executed.
 
-    learning_rate : float, default = 5e-4
-        The learning rate of the optimizer.
+    learning_rate : float, optional, default = 5e-4
+        The learning rate for the optimizer.
 
-    decay_rate : float, default = 5e-3
-        The exponential decay rate in the dynamic scheme of gamma.
+    exponential_decay_config : Tuple[float, float], optional, default = (0.005, 0.015)
+        Configuration for the exponential decay scheme of gamma. This tuple consists of:
+        
+        - `exp_decay_rate` (float): The exponential decay rate.
+        - `gamma_threshold` (float): The threshold (i.e., gamma - 0.5) to switch gamma to 0.5.
+        
+        Example:
+            >>> exponential_decay_config = (0.005, 0.015)
 
-    thres : float, default = 0.015
-        The threshold (i.e., gamma-0.5) to switch gamma to 0.5.
+        Notably, exponential decay will be performed after the custom gamma pretraining.
+        If exponential_decay_config is specified as None, this step will be skipped. 
+
+    custom_gamma_config : Tuple[Callable[[int], float], int, str], optional, default = None
+        A tuple containing the configuration for the custom gamma function. This tuple consists of:
+        
+        - `custom_gamma_function` (Callable[[int], float]): A custom function that computes the weight gamma based on the current epoch or step number (index starts from 0).
+        - `custom_pretrain_length` (int): The number of epochs or steps for custom pretraining.
+        - `custom_unit` (str): The unit of custom pretraining length, either `"epoch"` or `"step"`.
+        
+        Example:
+            >>> custom_gamma_config = (my_gamma_func, 10, 'epoch')
+        
+        Defaults to `None`, implying that default gamma settings are applied without a custom gamma function.
 
     epsilon : float, default = 1e-6
         The strength of the regularization/truncation under which matrices are inverted.
@@ -132,35 +151,64 @@ class MEMNet:
         'regularize': regularize the eigenvalues by adding epsilon.
         'trunc': truncate the eigenvalues by filtering out the eigenvalues below epsilon.
 
-    dtype : dtype, default = np.float32
-        The data type of the input data and the parameters of the model.
+    dtype : dtype, optional, default = np.float32
+        The data type of the input data and the model parameters.
 
-    save_model_interval : int, default = None
-        Saving the model every 'save_model_interval' epochs.
+    save_model_interval : int, optional, default = None
+        The interval (in epochs) at which the model is saved. If `None`, the model is not saved periodically.
 
-    reversible : boolean, default = True
+    reversible : bool, optional, default = True
         Whether to enforce detailed balance constraint. 
 
-    print : boolean, default = False
+    verbose : bool, optional, default = False
         Whether to print the validation loss every epoch during the training. 
     """
 
-    def __init__(self, lobe, lagtimes, optimizer='Adam', device=None, learning_rate=5e-4, decay_rate=0.005, thres=0.015,
-                 epsilon=1e-6, mode='regularize', dtype=np.float32, save_model_interval=None, reversible=True, print=False):
+    def __init__(
+            self, 
+            lobe: torch.nn.Module, 
+            lagtimes: List[float], 
+            optimizer: str = 'Adam', 
+            device: torch.device = torch.device('cpu'), 
+            learning_rate: float = 5e-4, 
+            exponential_decay_config: Tuple[float, float] = (0.005, 0.015),
+            custom_gamma_config: Optional[Tuple[Callable[[int], float], int, str]] = None,
+            epsilon: float = 1e-6, 
+            mode: str = 'regularize', 
+            dtype: np.dtype = np.float32, 
+            save_model_interval: Optional[int] = None, 
+            reversible: bool = True, 
+            verbose: bool = False):
 
         self._lobe = lobe
         self._lagtimes = lagtimes
         self._device = device
         self._learning_rate = learning_rate
-        self._decay_rate = decay_rate
-        self._thres = thres
-        self._pre_train = 1.
+
+        if exponential_decay_config is not None:
+            self._exp_decay_rate, self._thres = exponential_decay_config
+            self._is_exp_decay_active = 1.
+        else:
+            self._exp_decay_rate = None
+            self._thres = None
+            self._is_exp_decay_active = 0.
+        
+        if custom_gamma_config is not None:
+            self._custom_gamma_function, self._custom_pretrain_length, self._custom_unit = custom_gamma_config
+            self._in_custom_pretrain = True
+        else:
+            self._custom_gamma_function = None
+            self._custom_pretrain_length = None
+            self._custom_unit = None
+            self._in_custom_pretrain = False
+        self._actual_custom_pretrain_length = 0
+
         self._epsilon = epsilon
         self._mode = mode
         self._dtype = dtype
         self._save_model_interval = save_model_interval
         self._reversible = reversible
-        self._print = print
+        self._verbose = verbose
 
         if self._dtype == np.float32:
             self._lobe = self._lobe.float()
@@ -258,8 +306,16 @@ class MEMNet:
         self._lobe.train()
         self._optimizer.zero_grad()
 
+        if self._in_custom_pretrain:
+            if self._custom_unit == 'step':
+                gamma = self._custom_gamma_function(self._step)
+            else: 
+                gamma = self._custom_gamma_function(self._epoch)
+        else:
+            step = self._step - self._actual_custom_pretrain_length
+            gamma = 0.5 + 1.5*np.exp(-self._exp_decay_rate*step)*self._is_exp_decay_active
+
         x = [self._lobe(data[i]) for i in range(len(data))]
-        gamma = 0.5+1.5*np.exp(-self._decay_rate*self._step)*self._pre_train
         loss = self._memloss.fit(x).loss(weight=gamma)
 
         loss.backward()
@@ -283,7 +339,15 @@ class MEMNet:
         with torch.no_grad():
             val_outputs = [self._lobe(val_data[i]) for i in range(len(val_data))]
             self._memloss.fit(val_outputs)
-            self._memloss.save(weight=(0.5+1.5*np.exp(-self._decay_rate*self._step)*self._pre_train))
+            if self._in_custom_pretrain:
+                if self._custom_unit == 'step':
+                    gamma = self._custom_gamma_function(self._step)
+                else: 
+                    gamma = self._custom_gamma_function(self._epoch)
+            else:
+                step = self._step - self._actual_custom_pretrain_length
+                gamma = 0.5 + 1.5*np.exp(-self._exp_decay_rate*step)*self._is_exp_decay_active
+            self._memloss.save(weight=gamma)
 
             return self
 
@@ -312,16 +376,32 @@ class MEMNet:
 
         for epoch in progress(range(n_epochs), desc="epoch", total=n_epochs, leave=False):
 
+            self._epoch = epoch
+
             for batches in train_loader:
                 batches = [batches[i].to(device=self._device) for i in range(len(batches))]
                 self.partial_fit(batches)
 
-            if self._pre_train != 0.:
-                gamma = 0.5+1.5*np.exp(-self._decay_rate*self._step)*self._pre_train
-                if gamma <= 0.5+self._thres:
-                    self._pre_train = 0.
+            if self._in_custom_pretrain:
+                if self._custom_unit == 'step':
+                    if (self._step) >= self._custom_pretrain_length:
+                        self._in_custom_pretrain = False
+                        self._actual_custom_pretrain_length = self._step 
+                    gamma = self._custom_gamma_function(self._step)
+                else: 
+                    if (self._epoch + 1) >= self._custom_pretrain_length:
+                        self._in_custom_pretrain = False
+                        self._actual_custom_pretrain_length = self._step 
+                    gamma = self._custom_gamma_function(self._epoch)
+            
             else:
-                gamma = 0.5
+                if self._is_exp_decay_active != 0.:
+                    step = self._step - self._actual_custom_pretrain_length
+                    gamma = 0.5 + 1.5*np.exp(-self._exp_decay_rate*step)*self._is_exp_decay_active
+                    if gamma <= 0.5 + self._thres:
+                        self._is_exp_decay_active = 0.
+                else:
+                    gamma = 0.5
 
             if validation_loader is not None:
                 with torch.no_grad():
@@ -349,7 +429,7 @@ class MEMNet:
 
                     self._memloss.clear()
 
-                    if self._print:
+                    if self._verbose:
                         print(epoch, gamma, mean_lm, mean_log_lambda_hat)
                     
                     if self._save_model_interval is not None:

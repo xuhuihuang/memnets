@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 import re
 
-install_requires = ["numpy<=1.26","scipy","torch","tqdm"]
+install_requires = ["numpy<=1.26","scipy","torch==1.13.1","tqdm"]
 _extras_require = ["matplotlib","scikit-learn","jupyter"]
 extras_require = {b: a for a, b in (re.findall(r"^(([^!=<>~]+)(?:[!=<>~].*)?$)", x)[0] for x in _extras_require)}
 

@@ -3,8 +3,9 @@ python ./memnets/scripts/train_memnets.py \
     --device 'cpu' \
     --lagtimes 1 7 8 9 10 \
     --encoder_sizes 30 30 30 30 10 3 \
-    --decay_rate 0.002 \
-    --thres 0.05 \
+    --decay_rate 0.005 \
+    --thres 0.015 \
+    --custom_pretrain_length 15 \
     --learning_rate 0.001 \
     --n_epochs 100 \
     --train_split 0.9 \

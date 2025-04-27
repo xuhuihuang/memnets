@@ -27,6 +27,8 @@ parser.add_argument('--encoder_sizes', nargs='+', type=int, help='the size of ea
 parser.add_argument('--decay_rate', default=0.005, type=float, help='the exponential decay rate in the dynamic scheme of gamma')
 parser.add_argument('--thres', default=0.015, type=float, help='the threshold (i.e., gamma-0.5) to switch gamma to 0.5')
 
+parser.add_argument('--custom_pretrain_length', default=15, type=int, help='a custom pretraining with gamma equals to 2 before exponential decay')
+
 parser.add_argument('--optimizer', default='Adam', type=str, help='the optimizer to train the model')
 parser.add_argument('--learning_rate', default=1e-3, type=float, help='the learning rate to training the model')
 
@@ -89,7 +91,19 @@ def main():
     lobe = MEMLayer(args.encoder_sizes)
     lobe = lobe.to(device=device)
 
-    memnets = MEMNet(lobe=lobe, lagtimes=args.lagtimes, learning_rate=args.learning_rate, device=device, decay_rate=args.decay_rate, thres=args.thres, 
+    def custom_gamma_function(epoch):
+        return 2.
+    custom_pretrain_length = args.custom_pretrain_length
+    custom_unit = 'epoch'
+    custom_gamma_config = (custom_gamma_function,custom_pretrain_length,custom_unit)
+    exponential_decay_config = (args.decay_rate,args.thres)
+
+    memnets = MEMNet(lobe=lobe, 
+                    lagtimes=args.lagtimes, 
+                    learning_rate=args.learning_rate, 
+                    device=device, 
+                    exponential_decay_config = exponential_decay_config, 
+                    custom_gamma_config = custom_gamma_config, 
                     save_model_interval=args.save_model_interval)
     memnets_model = memnets.fit(loader_train, n_epochs=args.n_epochs, validation_loader=loader_val).fetch_model()
 
