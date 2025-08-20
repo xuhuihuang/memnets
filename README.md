@@ -76,7 +76,11 @@ sh ./memnets/scripts/train_memnets.sh
 
 ## How to cite
 
-MEMnets refers to the preprint [10.26434/chemrxiv-2024-71qrl](https://chemrxiv.org/engage/chemrxiv/article-details/66d7653dcec5d6c1420823b6).
+Please cite the fillowing article if you use MEMnets in your research:
+Liu, B., Cao S.,, Boysen, J.G., Xue, M., X. Huang, X.*,”Memory Kernel Minimization Based Neural Networks for Discovering Slow Collective Variables of Biomolecular Dynamics“, Nature Computational Science, 5, 562–571 , (2025)
+https://www.nature.com/articles/s43588-025-00815-8
+
+A preprint is also available here: [10.26434/chemrxiv-2024-71qrl](https://chemrxiv.org/engage/chemrxiv/article-details/66d7653dcec5d6c1420823b6).
 
 ## More instructions 
 
